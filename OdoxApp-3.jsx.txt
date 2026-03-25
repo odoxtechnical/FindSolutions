@@ -1,0 +1,844 @@
+import { useState, useEffect, useRef } from "react";
+
+const LANGUAGES = [
+  { code: 'English',  label: 'English' },
+  { code: 'Malayalam',label: 'മലയാളം' },
+  { code: 'Hindi',    label: 'हिन्दी' },
+  { code: 'Tamil',    label: 'தமிழ்' },
+];
+
+// Gemini models (matching your AI Studio setup)
+const MODEL_FLASH  = "gemini-2.0-flash";        // fast search + solutions
+const MODEL_PRO    = "gemini-2.0-flash";         // detailed analysis (use 2.0-flash for stability)
+
+// ── Icons ─────────────────────────────────────────────────────
+const Ic = ({ children, fill="none", stroke="currentColor", sw=2 }) => (
+  <svg viewBox="0 0 24 24" fill={fill} stroke={stroke} strokeWidth={sw}
+    strokeLinecap="round" strokeLinejoin="round" style={{width:"100%",height:"100%"}}>{children}</svg>
+);
+const CpuIcon    = () => <Ic><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/></Ic>;
+const SearchIcon = () => <Ic sw={2.5}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ic>;
+const PhoneIcon  = () => <Ic><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></Ic>;
+const WrenchIcon = () => <Ic><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></Ic>;
+const GlobeIcon  = () => <Ic><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></Ic>;
+const KeyIcon    = () => <Ic><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></Ic>;
+const SettIcon   = () => <Ic><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ic>;
+const HelpIcon   = () => <Ic><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></Ic>;
+const XIcon      = () => <Ic sw={2.5}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>;
+const InfoIcon   = () => <Ic><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></Ic>;
+const UsersIcon  = () => <Ic><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Ic>;
+const RefreshIcon= () => <Ic><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></Ic>;
+const ChevronIcon= () => <Ic sw={2.5}><polyline points="6 9 12 15 18 9"/></Ic>;
+const YtIcon     = () => <Ic fill="currentColor" stroke="none"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/><polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02" fill="white"/></Ic>;
+const IgIcon     = () => <Ic><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></Ic>;
+const FbIcon     = () => <Ic fill="currentColor" stroke="none"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></Ic>;
+const CheckIcon  = () => <Ic stroke="#10b981" sw={2.5}><polyline points="20 6 9 17 4 12"/></Ic>;
+const LinkIcon   = () => <Ic sw={2}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></Ic>;
+const EyeIcon    = () => <Ic><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></Ic>;
+const EyeOffIcon = () => <Ic><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></Ic>;
+const SpinIcon   = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+    style={{width:"100%",height:"100%",animation:"odoxSpin 0.75s linear infinite"}}>
+    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+  </svg>
+);
+
+// ══════════════════════════════════════════════════════════════
+//  GEMINI API — matches your Google AI Studio setup
+// ══════════════════════════════════════════════════════════════
+
+function getApiKey() {
+  return localStorage.getItem('GEMINI_API_KEY') || '';
+}
+
+// Error classifier
+function classifyError(status, body) {
+  const txt = JSON.stringify(body || '');
+  if (status === 400 && (txt.includes('API_KEY') || txt.includes('api key') || txt.includes('INVALID_ARGUMENT')))
+    return 'INVALID_KEY';
+  if (status === 429 || txt.includes('RESOURCE_EXHAUSTED') || txt.includes('quota'))
+    return 'RATE_LIMIT';
+  if (status === 403) return 'FORBIDDEN';
+  return 'ERROR';
+}
+
+// Core Gemini call — with optional Google Search grounding
+async function callGemini({ model = MODEL_FLASH, systemPrompt, userPrompt, useSearch = true }) {
+  const apiKey = getApiKey();
+  if (!apiKey) throw { type: 'NO_KEY', message: 'Gemini API key not set. Please enter your key in Settings.' };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const body = {
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+  };
+
+  // Add Google Search grounding (same as your AI Studio googleSearch tool)
+  if (useSearch) {
+    body.tools = [{ googleSearch: {} }];
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    const errType = classifyError(res.status, data);
+    const errMsg = data?.error?.message || `HTTP ${res.status}`;
+    throw { type: errType, message: errMsg, status: res.status };
+  }
+
+  // Extract text from response
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.filter(p => p.text)
+    ?.map(p => p.text)
+    ?.join('') || '';
+
+  // Check for safety block
+  const finishReason = data?.candidates?.[0]?.finishReason;
+  if (finishReason === 'SAFETY' || finishReason === 'RECITATION') {
+    throw { type: 'BLOCKED', message: 'Response was blocked by safety filters. Try rephrasing.' };
+  }
+
+  return text;
+}
+
+// Smart caller: tries with Google Search, falls back without search on rate limit
+async function smartGemini(systemPrompt, searchPrompt, fallbackPrompt) {
+  try {
+    const text = await callGemini({ systemPrompt, userPrompt: searchPrompt, useSearch: true });
+    return { text, mode: 'search' };
+  } catch (e) {
+    if (e?.type === 'NO_KEY' || e?.type === 'INVALID_KEY' || e?.type === 'FORBIDDEN') throw e;
+    if (e?.type === 'RATE_LIMIT' || e?.status >= 500) {
+      // Fallback: no search grounding
+      const text = await callGemini({ systemPrompt, userPrompt: fallbackPrompt, useSearch: false });
+      return { text, mode: 'ai' };
+    }
+    throw e;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  3 ANALYSIS FUNCTIONS (Gemini-powered)
+// ══════════════════════════════════════════════════════════════
+
+function getSolutions(model, problem, lang) {
+  const sys = `You are a senior mobile phone repair engineer. 
+Use Google Search to find REAL proven solutions for the exact model and problem given.
+RULES: Only present solutions actually found in search. Never invent steps. Mark uncertain info with ⚠️.
+Respond fully in ${lang}.`;
+
+  const searchP = `Search for real repair solutions for:
+Phone: ${model}
+Problem: ${problem}
+
+Use these searches: "${model} ${problem} repair solution" | "${model} ${problem} hardware fix" | "${model} ${problem} gsm forum"
+
+Respond in ${lang} with these sections:
+
+▌WHAT CAUSES THIS FAULT
+Specific root causes of "${problem}" on ${model} — hardware vs software differentiation.
+
+▌PROVEN SOLUTIONS
+✅ Solution 1: [title from search result]
+Steps:
+1. …
+2. …
+Source: [forum or site name]
+
+✅ Solution 2: [title]
+Steps: …
+
+▌QUICK FIX CHECKLIST
+☐ First thing to try (easiest)
+☐ Second thing to try
+☐ Third thing to try
+
+▌KEY COMPONENTS TO CHECK
+ICs, connectors or parts known to cause "${problem}" on ${model}.
+
+▌COMMUNITY TIPS
+Tips from technician forums specifically for ${model} + ${problem}.
+
+⚠️ Only write what is confirmed. Mark anything uncertain.`;
+
+  const fallP = `Give a detailed repair guide for:
+Phone: ${model}  |  Problem: ${problem}
+Language: ${lang}
+
+▌WHAT CAUSES THIS FAULT
+Root causes of "${problem}" on ${model} — hardware and software.
+
+▌STEP-BY-STEP REPAIR GUIDE
+Numbered practical steps for this model and fault.
+
+▌QUICK FIX CHECKLIST
+☐ First check
+☐ Second check
+☐ Third check
+
+▌KEY COMPONENTS TO INSPECT
+Components related to "${problem}" on this chipset platform.
+
+▌IMPORTANT NOTES
+Model-specific cautions. Mark uncertain items with ⚠️ Verify on schematic.`;
+
+  return smartGemini(sys, searchP, fallP);
+}
+
+function getPartsAndVideos(model, problem, lang) {
+  const sys = `You are a mobile repair parts and media specialist. 
+Use Google Search to find real schematics, parts, and YouTube videos.
+RULES: Only include real links. Use YouTube search URLs not guessed video IDs. Respond in ${lang}.`;
+
+  const searchP = `Search for schematics, parts, and videos for:
+Phone: ${model}  |  Problem: ${problem}
+
+Searches: "${model} schematic diagram" | "${model} ${problem} repair video" | "${model} ${problem} IC replacement"
+
+Respond in ${lang}:
+
+▌SCHEMATIC & BOARDVIEW
+• Schematic available: [Yes/No — source site]
+• Download link: [real URL if found, else best known source for this brand]
+• Boardview file: [source if found]
+• Key ICs for "${problem}": [names from schematic if found]
+
+▌YOUTUBE VIDEO GUIDES
+🎬 YouTube Search: https://www.youtube.com/results?search_query=${encodeURIComponent(model+" "+problem+" repair")}
+
+For each specific video found in search:
+🎬 [Video Title] — [Channel]
+
+▌REPLACEMENT PARTS
+• [Part name] — IC/number — buy: AliExpress / local supplier
+
+▌TEST POINTS
+Points for "${problem}" on ${model} (from schematic data):
+• [Point] → expected value
+
+▌GSM FORUM
+• https://www.gsm-forum.com/search?q=${encodeURIComponent(model+" "+problem)}
+• Specific threads found: [title — link]
+
+Mark unconfirmed data with ⚠️.`;
+
+  const fallP = `Parts and diagnostic info for:
+Phone: ${model}  |  Problem: ${problem}
+Language: ${lang}
+
+▌SCHEMATIC INFO
+Where to find ${model} schematics. Common sources for this brand.
+
+▌VIDEO GUIDES
+🎬 YouTube: https://www.youtube.com/results?search_query=${encodeURIComponent(model+" "+problem+" repair")}
+
+▌REPLACEMENT PARTS
+Components needed to fix "${problem}" on ${model} — part names and IC names.
+
+▌TEST POINTS
+Common test points for "${problem}" on this chipset — location → expected voltage.
+
+▌WHERE TO BUY
+AliExpress search guidance and local supplier tips.
+
+Mark uncertain items with ⚠️.`;
+
+  return smartGemini(sys, searchP, fallP);
+}
+
+function getSoftwareTools(model, problem, lang) {
+  const sys = `You are a mobile firmware and software repair specialist.
+Use Google Search for current verified firmware, tool support, and FRP methods for the exact model.
+RULES: Only list tools confirmed in search. Give real firmware URLs. Respond in ${lang}.`;
+
+  const searchP = `Search for firmware, tools and software info for:
+Phone: ${model}  |  Issue: ${problem}
+
+Searches: "${model} firmware download official" | "${model} FRP bypass 2024 2025" | "${model} supported repair tools chimera z3x umt"
+
+Respond in ${lang}:
+
+▌FIRMWARE & FLASHING
+• Latest version: [from search]
+• Official download: [real URL — samfw.com / sammobile.com / xiaomifirmwareupdater.com / miuirom.org / etc.]
+• Flash tool: [Odin / SP Flash Tool / MiFlash / QFIL]
+• Flash mode entry: [exact key combo for ${model}]
+• PC drivers: [driver package name]
+• Steps: 1… 2… 3…
+
+▌VERIFIED TOOL SUPPORT
+Only tools confirmed in search for ${model}:
+🔧 [Tool Name] — functions: [Read/Write/FRP/IMEI] — module: [version if found]
+
+▌FRP BYPASS — ${model}
+• Android version: [from search]
+• Working method:
+  Step 1: …  Step 2: …  Step 3: …
+• FRP tool + module: [name]
+• Security patch note: [if patched]
+
+▌SPECIAL MODES
+• Flash/Download mode: [exact keys for ${model}]
+• EDL / 9008 mode: [keys or method]
+• Recovery mode: [keys]
+• Hard reset: [keys]
+
+▌KNOWN SOFTWARE ISSUES
+Documented bugs/issues for ${model} found in search.
+
+Mark anything unconfirmed: ⚠️ Not confirmed — verify on official device list.`;
+
+  const fallP = `Software, firmware and tools for:
+Phone: ${model}  |  Problem: ${problem}
+Language: ${lang}
+
+▌FIRMWARE & FLASHING
+Official firmware source URL for this brand. Flash tool name. Flash mode key combo. Step-by-step flashing.
+
+▌TOOL SUPPORT
+Repair tools commonly supporting this brand/platform:
+🔧 [Tool] — typical functions
+
+▌FRP BYPASS
+Android version this model runs. Common FRP method. Steps. Which tools handle FRP for this brand.
+
+▌SPECIAL MODES
+• Download mode: keys
+• EDL / 9008 mode: method
+• Recovery mode: keys
+• Hard reset: keys
+
+▌SOFTWARE TROUBLESHOOTING
+Steps to rule out software as cause of "${problem}".
+
+Mark uncertain items with ⚠️ Verify.`;
+
+  return smartGemini(sys, searchP, fallP);
+}
+
+// ── State helper ───────────────────────────────────────────────
+const fresh = () => ({ text:"", loading:false, done:false, error:"", errType:null, mode:null });
+
+// ══════════════════════════════════════════════════════════════
+//  APP
+// ══════════════════════════════════════════════════════════════
+export default function App() {
+  const [phoneModel, setPhoneModel] = useState("");
+  const [problem,    setProblem]    = useState("");
+  const [language,   setLanguage]   = useState("Malayalam");
+  const [showResults,setShowResults]= useState(false);
+  const [activeTab,  setActiveTab]  = useState("solutions");
+  const [showSett,   setShowSett]   = useState(false);
+  const [showHelp,   setShowHelp]   = useState(false);
+  const [mounted,    setMounted]    = useState(false);
+  const [apiKey,     setApiKey]     = useState(() => localStorage.getItem('GEMINI_API_KEY') || '');
+  const [showKey,    setShowKey]    = useState(false);
+  const [solutions,  setSolutions]  = useState(fresh());
+  const [parts,      setParts]      = useState(fresh());
+  const [software,   setSoftware]   = useState(fresh());
+  const resultsRef = useRef(null);
+
+  useEffect(() => { setTimeout(() => setMounted(true), 80); }, []);
+
+  const hasKey = !!apiKey.trim();
+
+  const saveKey = (val) => {
+    setApiKey(val);
+    if (val.trim()) localStorage.setItem('GEMINI_API_KEY', val.trim());
+    else localStorage.removeItem('GEMINI_API_KEY');
+  };
+
+  const stateMap  = { solutions, parts, software };
+  const setterMap = { solutions: setSolutions, parts: setParts, software: setSoftware };
+  const getFn = (id, m, p, l) => ({
+    solutions: () => getSolutions(m, p, l),
+    parts:     () => getPartsAndVideos(m, p, l),
+    software:  () => getSoftwareTools(m, p, l),
+  })[id];
+
+  const runTab = (id, m, p, l) => {
+    setterMap[id]({ text:"", loading:true, done:false, error:"", errType:null, mode:null });
+    getFn(id, m, p, l)()
+      .then(({ text, mode }) => setterMap[id]({ text, loading:false, done:true, error:"", errType:null, mode }))
+      .catch(e => setterMap[id]({ text:"", loading:false, done:true, error: e.message || "Request failed", errType: e.type || "ERROR", mode:null }));
+  };
+
+  const runAll = (m, p, l) => {
+    if (!getApiKey()) { setShowSett(true); return; }
+    setShowResults(true);
+    setActiveTab("solutions");
+    setTimeout(() => resultsRef.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 200);
+    ["solutions","parts","software"].forEach(id => runTab(id, m, p, l));
+  };
+
+  const handleSearch = () => {
+    if (!phoneModel.trim() || !problem.trim()) { alert("Please enter both Phone Model and Problem"); return; }
+    if (!hasKey) { setShowSett(true); return; }
+    runAll(phoneModel.trim(), problem.trim(), language);
+  };
+
+  const retryTab = id => runTab(id, phoneModel, problem, language);
+
+  const openPlatform = p => {
+    const q = encodeURIComponent(`${phoneModel} ${problem} repair solution`);
+    const urls = {
+      Instagram:`https://www.google.com/search?q=site:instagram.com+${q}`,
+      YouTube:  `https://www.youtube.com/results?search_query=${q}`,
+      Facebook: `https://www.facebook.com/groups/borneoschematic/search/?q=${q}`,
+    };
+    if (urls[p]) window.open(urls[p], "_blank");
+  };
+
+  const TABS = [
+    { id:"solutions", emoji:"✅", label:"Solutions",    color:"#3b82f6", glow:"rgba(59,130,246,0.18)", loadMsg:"Searching repair forums…" },
+    { id:"parts",     emoji:"📐", label:"Parts & Vids", color:"#10b981", glow:"rgba(16,185,129,0.18)", loadMsg:"Finding schematics & videos…" },
+    { id:"software",  emoji:"💾", label:"Firmware",     color:"#a855f7", glow:"rgba(168,85,247,0.18)", loadMsg:"Searching firmware & tools…" },
+  ];
+  const activeDef   = TABS.find(t => t.id === activeTab);
+  const activeState = stateMap[activeTab];
+
+  const card    = { background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:22 };
+  const iconBtn = { width:32,height:32,borderRadius:9,border:"none",background:"rgba(255,255,255,0.05)",cursor:"pointer",color:"rgba(255,255,255,0.35)",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .18s" };
+  const modal   = { position:"fixed",inset:0,zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20 };
+  const mBox    = { position:"relative",width:"100%",maxWidth:440,background:"#0e0e1c",border:"1px solid rgba(255,255,255,0.1)",borderRadius:24,padding:28,boxShadow:"0 30px 70px rgba(0,0,0,0.6)",animation:"odoxPopIn .2s ease" };
+
+  // Render content lines with styled headers
+  const renderContent = (text, color) =>
+    text.split('\n').map((line, i) => {
+      const isH    = line.startsWith('▌');
+      const isWarn = line.startsWith('⚠️');
+      const isTip  = ['✅','🎬','🔧','☐','☑'].some(p => line.startsWith(p));
+      return (
+        <div key={i} style={{
+          marginBottom:isH?6:2, marginTop:isH?18:0,
+          color:isH?color:isWarn?'#fbbf24':isTip?'#e2e8f0':'rgba(255,255,255,0.78)',
+          fontWeight:isH?800:isTip?600:'normal',
+          fontSize:isH?11.5:13, letterSpacing:isH?'0.05em':'normal',
+          background:isWarn?'rgba(251,191,36,0.06)':'transparent',
+          borderLeft:isH?`3px solid ${color}`:'none',
+          padding:isWarn?'4px 8px':isH?'2px 0 2px 10px':0,
+          borderRadius:isWarn?6:0, lineHeight:1.85,
+        }}>{line||'\u00A0'}</div>
+      );
+    });
+
+  // Error display — maps error type to friendly message
+  const ErrorBox = ({ errType, errMsg, tabId }) => {
+    const isNoKey  = errType === 'NO_KEY';
+    const isBadKey = errType === 'INVALID_KEY' || errType === 'FORBIDDEN';
+    const isLimit  = errType === 'RATE_LIMIT';
+    return (
+      <div style={{background:"rgba(239,68,68,0.07)",border:"1px solid rgba(239,68,68,0.18)",borderRadius:14,padding:20,textAlign:"center"}}>
+        <div style={{fontSize:30,marginBottom:10}}>
+          {isNoKey||isBadKey?'🔑':isLimit?'⏳':'⚠️'}
+        </div>
+        <p style={{fontSize:14,fontWeight:700,color:"#fca5a5",marginBottom:6}}>
+          {isNoKey?'API Key Required':isBadKey?'Invalid API Key':isLimit?'Rate Limit Reached':'Request Failed'}
+        </p>
+        <p style={{fontSize:12,color:"rgba(255,255,255,0.4)",lineHeight:1.6,marginBottom:16}}>
+          {isNoKey&&'Enter your Gemini API key in Settings to use this app.'}
+          {isBadKey&&'Your API key is invalid or doesn\'t have access. Check your key in Settings.'}
+          {isLimit&&'Gemini free quota exceeded. Wait a minute and retry, or upgrade your API plan.'}
+          {!isNoKey&&!isBadKey&&!isLimit&&(errMsg||'Something went wrong. Please try again.')}
+        </p>
+        <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+          {(isNoKey||isBadKey) && (
+            <button onClick={()=>setShowSett(true)} style={{padding:"9px 18px",borderRadius:10,border:"none",background:"#3b82f6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              🔑 Open Settings
+            </button>
+          )}
+          {!isNoKey && !isBadKey && (
+            <button onClick={()=>retryTab(tabId)} style={{padding:"9px 18px",borderRadius:10,border:"1px solid rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.12)",color:"#fca5a5",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+              ↻ Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Mode badge
+  const ModeBadge = ({ mode }) => {
+    if (!mode) return null;
+    const live = mode === 'search';
+    return (
+      <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:20,background:live?"rgba(16,185,129,0.12)":"rgba(168,85,247,0.12)",border:`1px solid ${live?"rgba(16,185,129,0.25)":"rgba(168,85,247,0.25)"}`,marginBottom:14}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:live?"#10b981":"#a855f7",boxShadow:`0 0 5px ${live?"#10b981":"#a855f7"}`}}/>
+        <span style={{fontSize:9,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.18em",color:live?"#6ee7b7":"#d8b4fe"}}>
+          {live?"🌐 Google Search Results":"🧠 AI Knowledge Fallback"}
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"#07070f",color:"#dde3ee",fontFamily:"'Inter',system-ui,sans-serif",overflowX:"hidden"}}>
+      <div style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none",background:"radial-gradient(ellipse 90% 50% at 50% -5%,rgba(59,130,246,0.13) 0%,transparent 65%),radial-gradient(ellipse 60% 50% at 90% 90%,rgba(168,85,247,0.07) 0%,transparent 55%)"}}/>
+      <div style={{position:"fixed",inset:0,zIndex:0,pointerEvents:"none",backgroundImage:"radial-gradient(rgba(255,255,255,0.025) 1px,transparent 1px)",backgroundSize:"28px 28px"}}/>
+
+      <div style={{position:"relative",zIndex:1}}>
+
+        {/* ══ HEADER ══ */}
+        <header style={{position:"sticky",top:0,zIndex:20,background:"rgba(7,7,15,0.9)",backdropFilter:"blur(20px)",borderBottom:"1px solid rgba(255,255,255,0.06)",padding:"13px 18px"}}>
+          <div style={{maxWidth:580,margin:"0 auto",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{display:"flex",alignItems:"center",gap:11}}>
+              <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 18px rgba(59,130,246,0.4)",flexShrink:0}}>
+                <div style={{width:21,height:21,color:"#fff"}}><CpuIcon/></div>
+              </div>
+              <div>
+                <div style={{fontSize:13.5,fontWeight:800,letterSpacing:"-0.02em"}}>ODOX FIND SOLUTION AI</div>
+                <div style={{fontSize:8,color:"rgba(255,255,255,0.27)",letterSpacing:"0.22em",fontFamily:"monospace",textTransform:"uppercase"}}>
+                  Gemini AI • Google Search • Real Solutions
+                </div>
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              {/* API key status dot */}
+              <div title={hasKey?"API Key Set":"No API Key"} style={{width:8,height:8,borderRadius:"50%",background:hasKey?"#10b981":"#ef4444",boxShadow:`0 0 6px ${hasKey?"#10b981":"#ef4444"}`,cursor:"pointer"}} onClick={()=>setShowSett(true)}/>
+              {[{ic:<HelpIcon/>,tip:"Help",fn:()=>setShowHelp(true)},{ic:<SettIcon/>,tip:"Settings",fn:()=>setShowSett(true)},{ic:<RefreshIcon/>,tip:"Reset",fn:()=>{setLanguage("Malayalam");setShowResults(false);setSolutions(fresh());setParts(fresh());setSoftware(fresh());}}].map(({ic,tip,fn})=>(
+                <button key={tip} title={tip} onClick={fn} style={iconBtn}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(59,130,246,0.18)";e.currentTarget.style.color="#60a5fa";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="rgba(255,255,255,0.35)";}}>
+                  <div style={{width:13,height:13}}>{ic}</div>
+                </button>
+              ))}
+              <div style={{position:"relative",display:"flex",alignItems:"center",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:20,padding:"5px 22px 5px 8px",gap:5}}>
+                <div style={{width:11,height:11,color:"#60a5fa"}}><GlobeIcon/></div>
+                <select value={language} onChange={e=>setLanguage(e.target.value)} style={{background:"transparent",border:"none",color:"#dde3ee",fontSize:9.5,fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",cursor:"pointer",outline:"none"}}>
+                  {LANGUAGES.map(l=><option key={l.code} value={l.code} style={{background:"#111"}}>{l.label}</option>)}
+                </select>
+                <div style={{width:8,height:8,color:"rgba(255,255,255,0.3)",position:"absolute",right:7,pointerEvents:"none"}}><ChevronIcon/></div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* ══ MAIN ══ */}
+        <main style={{maxWidth:580,margin:"0 auto",padding:"26px 18px 80px"}}>
+
+          {/* API Key Banner — shown when no key */}
+          {!hasKey && (
+            <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",borderRadius:16,padding:"14px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:12,cursor:"pointer"}} onClick={()=>setShowSett(true)}>
+              <div style={{width:20,height:20,color:"#f87171",flexShrink:0}}><KeyIcon/></div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#fca5a5",marginBottom:2}}>Gemini API Key Required</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Tap here to enter your API key from Google AI Studio</div>
+              </div>
+              <div style={{fontSize:11,color:"#60a5fa",fontWeight:600,whiteSpace:"nowrap"}}>Set Key →</div>
+            </div>
+          )}
+
+          {/* Hero */}
+          <div style={{textAlign:"center",marginBottom:24,opacity:mounted?1:0,transform:mounted?"none":"translateY(18px)",transition:"all .5s ease"}}>
+            <div style={{display:"inline-flex",alignItems:"center",gap:7,background:"rgba(59,130,246,0.1)",border:"1px solid rgba(59,130,246,0.22)",borderRadius:20,padding:"4px 13px",marginBottom:13}}>
+              <div style={{width:7,height:7,borderRadius:"50%",background:"#3b82f6",boxShadow:"0 0 7px #3b82f6",animation:"odoxPulse 2s infinite"}}/>
+              <span style={{fontSize:8.5,color:"#60a5fa",letterSpacing:"0.2em",fontFamily:"monospace",textTransform:"uppercase"}}>Gemini AI + Google Search</span>
+            </div>
+            <h2 style={{fontSize:25,fontWeight:900,letterSpacing:"-0.03em",lineHeight:1.25,background:"linear-gradient(135deg,#fff,rgba(255,255,255,0.5))",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginBottom:7}}>
+              Find Real Repair Solutions
+            </h2>
+            <p style={{fontSize:12.5,color:"rgba(255,255,255,0.37)",lineHeight:1.65}}>
+              Powered by Gemini AI with live Google Search grounding
+            </p>
+          </div>
+
+          {/* Inputs */}
+          <div style={{...card,padding:20,marginBottom:14,opacity:mounted?1:0,transform:mounted?"none":"translateY(16px)",transition:"all .5s ease .1s"}}>
+            {[
+              {label:"Phone Model",placeholder:"e.g. Poco X3 Pro, Samsung A73 5G SM-A736B",icon:<PhoneIcon/>,val:phoneModel,set:setPhoneModel},
+              {label:"Problem / Fault",placeholder:"e.g. Dead Phone, No Service, FRP Bypass",icon:<WrenchIcon/>,val:problem,set:setProblem},
+            ].map(({label,placeholder,icon,val,set},i)=>(
+              <div key={label} style={{marginBottom:i===0?14:0}}>
+                <label style={{fontSize:9,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.2em",color:"rgba(255,255,255,0.25)",display:"block",marginBottom:7}}>{label}</label>
+                <div style={{position:"relative"}}>
+                  <div style={{position:"absolute",left:13,top:"50%",transform:"translateY(-50%)",width:17,height:17,color:"rgba(255,255,255,0.2)",pointerEvents:"none"}}>{icon}</div>
+                  <input type="text" placeholder={placeholder} value={val} onChange={e=>set(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSearch()}
+                    style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:13,padding:"13px 13px 13px 42px",color:"#dde3ee",fontSize:15,outline:"none",transition:"border .2s,box-shadow .2s"}}
+                    onFocus={e=>{e.target.style.borderColor="rgba(59,130,246,0.55)";e.target.style.boxShadow="0 0 0 3px rgba(59,130,246,0.1)";}}
+                    onBlur={e=>{e.target.style.borderColor="rgba(255,255,255,0.09)";e.target.style.boxShadow="none";}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Problem chips */}
+          <div style={{marginBottom:16,display:"flex",gap:6,flexWrap:"wrap"}}>
+            {["No Service","Dead Phone","No Display","FRP Bypass","Charging Issue","Water Damage","Touch Not Working","Camera Failed","Bootloop","No IMEI","WiFi Issue","Speaker Fault"].map(s=>(
+              <button key={s} onClick={()=>setProblem(s)}
+                style={{padding:"5px 11px",borderRadius:20,border:`1px solid ${problem===s?"rgba(59,130,246,0.4)":"rgba(255,255,255,0.1)"}`,background:problem===s?"rgba(59,130,246,0.2)":"rgba(255,255,255,0.04)",color:problem===s?"#60a5fa":"rgba(255,255,255,0.45)",fontSize:10.5,cursor:"pointer",transition:"all .15s",fontWeight:500}}
+                onMouseEnter={e=>{if(problem!==s){e.currentTarget.style.background="rgba(59,130,246,0.1)";e.currentTarget.style.color="#93c5fd";}}}
+                onMouseLeave={e=>{if(problem!==s){e.currentTarget.style.background="rgba(255,255,255,0.04)";e.currentTarget.style.color="rgba(255,255,255,0.45)";}}}>{s}
+              </button>
+            ))}
+          </div>
+
+          {/* Search button */}
+          <button onClick={handleSearch}
+            style={{width:"100%",padding:"17px",borderRadius:15,border:"none",cursor:"pointer",background:hasKey?"linear-gradient(135deg,#3b82f6,#2563eb)":"rgba(59,130,246,0.3)",color:"#fff",fontSize:16,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase",display:"flex",alignItems:"center",justifyContent:"center",gap:10,boxShadow:hasKey?"0 8px 28px rgba(59,130,246,0.38)":"none",transition:"all .2s",marginBottom:26,opacity:mounted?1:0}}
+            onMouseEnter={e=>{if(hasKey){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 14px 38px rgba(59,130,246,0.5)";}}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=hasKey?"0 8px 28px rgba(59,130,246,0.38)":"none";}}>
+            <div style={{width:20,height:20}}><SearchIcon/></div>
+            {hasKey?"Search Solutions":"Set API Key First"}
+          </button>
+
+          {/* ══ RESULTS ══ */}
+          {showResults && (
+            <div ref={resultsRef} style={{animation:"odoxFadeUp .4s ease"}}>
+
+              {/* Status */}
+              <div style={{display:"flex",gap:14,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+                {TABS.map(t=>{
+                  const st=stateMap[t.id];
+                  return (
+                    <div key={t.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:9.5,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.1em",color:st.error?"#f87171":st.done?t.color:st.loading?"rgba(255,255,255,0.55)":"rgba(255,255,255,0.2)"}}>
+                      <div style={{width:12,height:12}}>
+                        {st.loading?<SpinIcon/>:st.done&&!st.error?<CheckIcon/>:st.error?<span style={{fontSize:11,color:"#f87171"}}>✕</span>:<div style={{width:7,height:7,borderRadius:"50%",background:"rgba(255,255,255,0.15)",margin:"2px"}}/>}
+                      </div>
+                      {t.label}
+                      {st.done&&!st.error&&st.mode&&(
+                        <span style={{fontSize:8,padding:"1px 5px",borderRadius:8,background:st.mode==='search'?"rgba(16,185,129,0.15)":"rgba(168,85,247,0.15)",color:st.mode==='search'?"#6ee7b7":"#d8b4fe"}}>
+                          {st.mode==='search'?'🌐':'🧠'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Tab panel */}
+              <div style={{...card,padding:0,marginBottom:18,overflow:"hidden"}}>
+                <div style={{display:"flex",borderBottom:"1px solid rgba(255,255,255,0.07)"}}>
+                  {TABS.map(t=>(
+                    <button key={t.id} onClick={()=>setActiveTab(t.id)} style={{flex:1,padding:"13px 4px",border:"none",cursor:"pointer",background:activeTab===t.id?t.glow:"transparent",borderBottom:`2px solid ${activeTab===t.id?t.color:"transparent"}`,color:activeTab===t.id?t.color:"rgba(255,255,255,0.28)",fontSize:10,fontWeight:800,letterSpacing:"0.04em",transition:"all .18s",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <span>{t.emoji} {t.label}</span>
+                      {stateMap[t.id].loading&&<div style={{width:10,height:10,marginLeft:2}}><SpinIcon/></div>}
+                      {stateMap[t.id].done&&!stateMap[t.id].error&&<div style={{width:10,height:10,marginLeft:2}}><CheckIcon/></div>}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{padding:"18px 18px 22px",minHeight:180}}>
+                  {activeState.loading&&(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:14,padding:"36px 0"}}>
+                      <div style={{width:34,height:34,color:activeDef.color}}><SpinIcon/></div>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontSize:11,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.18em",color:"rgba(255,255,255,0.45)",marginBottom:5}}>{activeDef.loadMsg}</div>
+                        <div style={{fontSize:10,color:"rgba(255,255,255,0.22)"}}>Gemini AI + Google Search…</div>
+                      </div>
+                      <div style={{display:"flex",gap:6,marginTop:4}}>
+                        {[0,1,2].map(i=>(
+                          <div key={i} style={{width:6,height:6,borderRadius:"50%",background:activeDef.color,opacity:0.6,animation:`odoxDot 1.2s ${i*0.2}s infinite ease-in-out`}}/>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {activeState.error&&<ErrorBox errType={activeState.errType} errMsg={activeState.error} tabId={activeTab}/>}
+                  {!activeState.loading&&!activeState.error&&activeState.text&&(
+                    <div>
+                      <ModeBadge mode={activeState.mode}/>
+                      {renderContent(activeState.text, activeDef.color)}
+                    </div>
+                  )}
+                  {!activeState.loading&&!activeState.error&&!activeState.text&&activeState.done&&(
+                    <div style={{textAlign:"center",padding:"30px 0"}}>
+                      <p style={{fontSize:13,color:"rgba(255,255,255,0.3)",marginBottom:12}}>No results returned.</p>
+                      <button onClick={()=>retryTab(activeTab)} style={{padding:"8px 18px",borderRadius:9,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.05)",color:"rgba(255,255,255,0.5)",fontSize:11,fontWeight:700,cursor:"pointer"}}>↻ Retry</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Notice */}
+              <div style={{background:"rgba(59,130,246,0.06)",border:"1px solid rgba(59,130,246,0.15)",borderRadius:14,padding:"10px 14px",marginBottom:18,display:"flex",gap:9,alignItems:"flex-start"}}>
+                <div style={{width:15,height:15,color:"#60a5fa",flexShrink:0,marginTop:1}}><InfoIcon/></div>
+                <p style={{fontSize:11,color:"rgba(147,197,253,0.78)",lineHeight:1.6,margin:0}}>
+                  <strong style={{color:"#93c5fd"}}>🌐 Google Search</strong> = Live web results via Gemini grounding.&nbsp;
+                  <strong style={{color:"#d8b4fe"}}>🧠 AI</strong> = Gemini knowledge fallback. Always verify before repair.
+                </p>
+              </div>
+
+              {/* Quick links */}
+              <div style={{...card,padding:16,marginBottom:18}}>
+                <div style={{fontSize:9,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.25em",color:"rgba(255,255,255,0.2)",marginBottom:12}}>Quick Web Searches</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {[
+                    {label:"Schematic",    url:`https://www.google.com/search?q=${encodeURIComponent(phoneModel+" schematic diagram")}`},
+                    {label:"YouTube Fix",  url:`https://www.youtube.com/results?search_query=${encodeURIComponent(phoneModel+" "+problem+" repair")}`},
+                    {label:"GSM Forum",    url:`https://www.gsm-forum.com/search?q=${encodeURIComponent(phoneModel+" "+problem)}`},
+                    {label:"Firmware",     url:`https://www.google.com/search?q=${encodeURIComponent(phoneModel+" firmware download")}`},
+                    {label:"FRP 2025",     url:`https://www.google.com/search?q=${encodeURIComponent(phoneModel+" FRP bypass 2025")}`},
+                  ].map(({label,url})=>(
+                    <button key={label} onClick={()=>window.open(url,"_blank")} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:20,border:"1px solid rgba(255,255,255,0.1)",background:"rgba(255,255,255,0.04)",color:"rgba(255,255,255,0.55)",fontSize:10.5,cursor:"pointer",fontWeight:500,transition:"all .15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background="rgba(59,130,246,0.15)";e.currentTarget.style.color="#60a5fa";e.currentTarget.style.borderColor="rgba(59,130,246,0.35)";}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.04)";e.currentTarget.style.color="rgba(255,255,255,0.55)";e.currentTarget.style.borderColor="rgba(255,255,255,0.1)";}}>
+                      <div style={{width:11,height:11}}><LinkIcon/></div>{label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Social */}
+              <div style={{marginBottom:18}}>
+                <div style={{fontSize:8.5,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.3em",color:"rgba(255,255,255,0.18)",textAlign:"center",marginBottom:10}}>Search on Social Platforms</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+                  {[
+                    {k:"Instagram",ic:<IgIcon/>,col:"#ec4899",bg:"rgba(236,72,153,0.1)",br:"rgba(236,72,153,0.3)"},
+                    {k:"YouTube",  ic:<YtIcon/>,col:"#ef4444",bg:"rgba(239,68,68,0.1)", br:"rgba(239,68,68,0.3)"},
+                    {k:"Facebook", ic:<FbIcon/>,col:"#3b82f6",bg:"rgba(59,130,246,0.1)",br:"rgba(59,130,246,0.3)"},
+                  ].map(({k,ic,col,bg,br})=>(
+                    <button key={k} onClick={()=>openPlatform(k)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:7,padding:"14px 6px",borderRadius:15,cursor:"pointer",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:col,transition:"all .18s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background=bg;e.currentTarget.style.borderColor=br;e.currentTarget.style.transform="translateY(-2px)";}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.04)";e.currentTarget.style.borderColor="rgba(255,255,255,0.08)";e.currentTarget.style.transform="none";}}>
+                      <div style={{width:22,height:22}}>{ic}</div>
+                      <span style={{fontSize:8.5,fontWeight:800,letterSpacing:"0.1em",textTransform:"uppercase",color:"rgba(255,255,255,0.45)"}}>{k}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* ODOX */}
+              <button onClick={()=>window.open("https://odox.in","_blank")} style={{width:"100%",padding:"15px",borderRadius:14,border:"none",cursor:"pointer",background:"linear-gradient(135deg,#f27d26,#dc6010)",color:"#fff",fontSize:13,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 8px 22px rgba(242,125,38,0.28)",marginBottom:16,transition:"all .2s"}}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 12px 30px rgba(242,125,38,0.4)";}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 8px 22px rgba(242,125,38,0.28)";}}>
+                <div style={{width:17,height:17}}><GlobeIcon/></div>
+                Open ODOX Website
+              </button>
+
+              {/* Community */}
+              <div style={{background:"rgba(59,130,246,0.07)",border:"1px solid rgba(59,130,246,0.18)",borderRadius:18,padding:18}}>
+                <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:10}}>
+                  <div style={{width:38,height:38,borderRadius:"50%",background:"#3b82f6",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <div style={{width:19,height:19,color:"#fff"}}><UsersIcon/></div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10.5,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase"}}>BORNEO SOLUTION COMMUNITY</div>
+                    <div style={{fontSize:8.5,color:"rgba(255,255,255,0.28)",letterSpacing:"0.15em",textTransform:"uppercase"}}>Join 10k+ Technicians</div>
+                  </div>
+                </div>
+                <p style={{fontSize:12,color:"rgba(255,255,255,0.45)",lineHeight:1.65,marginBottom:12}}>Join our Facebook group for real-world repair solutions from professional technicians.</p>
+                <button onClick={()=>window.open("https://www.facebook.com/groups/794321951308616/","_blank")} style={{width:"100%",padding:"11px",borderRadius:11,border:"none",cursor:"pointer",background:"#fff",color:"#3b82f6",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"all .18s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#eff6ff"}
+                  onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                  <div style={{width:15,height:15}}><FbIcon/></div>
+                  Open Facebook Group
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+
+        <footer style={{textAlign:"center",padding:"18px 20px",borderTop:"1px solid rgba(255,255,255,0.05)"}}>
+          <p style={{fontSize:8.5,fontFamily:"monospace",color:"rgba(255,255,255,0.13)",letterSpacing:"0.4em",textTransform:"uppercase"}}>ODOX FIND SOLUTION AI v2.0 • Gemini AI • Google Search</p>
+        </footer>
+      </div>
+
+      {/* ══ SETTINGS MODAL ══ */}
+      {showSett&&(
+        <div style={modal}>
+          <div onClick={()=>setShowSett(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(10px)"}}/>
+          <div style={mBox}>
+            <button onClick={()=>setShowSett(false)} style={{position:"absolute",right:18,top:18,width:26,height:26,border:"none",background:"transparent",color:"rgba(255,255,255,0.25)",cursor:"pointer"}}><XIcon/></button>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>
+              <div style={{width:38,height:38,borderRadius:11,background:"rgba(59,130,246,0.14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <div style={{width:19,height:19,color:"#60a5fa"}}><KeyIcon/></div>
+              </div>
+              <h2 style={{fontSize:17,fontWeight:800}}>Gemini API Settings</h2>
+            </div>
+
+            {/* Key input */}
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:9,fontFamily:"monospace",textTransform:"uppercase",letterSpacing:"0.2em",color:"rgba(255,255,255,0.3)",display:"block",marginBottom:8}}>Gemini API Key</label>
+              <div style={{position:"relative"}}>
+                <input
+                  type={showKey?"text":"password"}
+                  placeholder="AIza..."
+                  value={apiKey}
+                  onChange={e=>saveKey(e.target.value)}
+                  style={{width:"100%",boxSizing:"border-box",background:"rgba(255,255,255,0.06)",border:`1px solid ${apiKey?"rgba(16,185,129,0.4)":"rgba(255,255,255,0.12)"}`,borderRadius:12,padding:"12px 44px 12px 14px",color:"#dde3ee",fontSize:14,outline:"none",fontFamily:"monospace",transition:"border .2s"}}
+                />
+                <button onClick={()=>setShowKey(!showKey)} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",width:20,height:20,border:"none",background:"transparent",color:"rgba(255,255,255,0.3)",cursor:"pointer"}}>
+                  {showKey?<EyeOffIcon/>:<EyeIcon/>}
+                </button>
+              </div>
+              {apiKey && (
+                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}>
+                  <div style={{width:6,height:6,borderRadius:"50%",background:"#10b981"}}/>
+                  <span style={{fontSize:10,color:"#6ee7b7"}}>API key saved</span>
+                </div>
+              )}
+            </div>
+
+            {/* How to get key */}
+            <div style={{background:"rgba(59,130,246,0.07)",border:"1px solid rgba(59,130,246,0.18)",borderRadius:12,padding:14,marginBottom:18}}>
+              <p style={{fontSize:11.5,color:"rgba(147,197,253,0.85)",lineHeight:1.75,margin:0}}>
+                <strong style={{color:"#93c5fd"}}>How to get your Gemini API key:</strong><br/>
+                1. Go to <span style={{color:"#60a5fa",cursor:"pointer",textDecoration:"underline"}} onClick={()=>window.open("https://aistudio.google.com/app/apikey","_blank")}>aistudio.google.com/app/apikey</span><br/>
+                2. Click <strong>"Create API key"</strong><br/>
+                3. Copy and paste it above<br/><br/>
+                <strong style={{color:"#93c5fd"}}>Free tier:</strong> Gemini 2.0 Flash — generous free quota.<br/>
+                <strong style={{color:"#93c5fd"}}>Uses:</strong> Google Search grounding for live results.
+              </p>
+            </div>
+
+            <button onClick={()=>setShowSett(false)} style={{width:"100%",padding:"12px",borderRadius:12,border:"none",cursor:"pointer",background:"#3b82f6",color:"#fff",fontSize:13,fontWeight:700}}>
+              Save & Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ══ HELP MODAL ══ */}
+      {showHelp&&(
+        <div style={modal}>
+          <div onClick={()=>setShowHelp(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(10px)"}}/>
+          <div style={{...mBox,maxHeight:"82vh",overflowY:"auto"}}>
+            <button onClick={()=>setShowHelp(false)} style={{position:"absolute",right:18,top:18,width:26,height:26,border:"none",background:"transparent",color:"rgba(255,255,255,0.25)",cursor:"pointer"}}><XIcon/></button>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:22}}>
+              <div style={{width:38,height:38,borderRadius:11,background:"rgba(16,185,129,0.14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <div style={{width:19,height:19,color:"#34d399"}}><HelpIcon/></div>
+              </div>
+              <h2 style={{fontSize:17,fontWeight:800}}>How to Use</h2>
+            </div>
+            {[
+              {step:"1. Set Your Gemini API Key",desc:"Open Settings (gear icon) and paste your Gemini API key from Google AI Studio. It's free — go to aistudio.google.com/app/apikey to get one."},
+              {step:"2. Enter Model & Problem",desc:"Type the full model name (e.g. Poco X3 Pro, Samsung SM-A736B) and problem. Use the chips below input to quickly select common faults."},
+              {step:"3. ✅ Solutions Tab",desc:"Gemini searches Google for proven repair solutions from real forums and technician communities. Shows step-by-step fixes with sources."},
+              {step:"4. 📐 Parts & Vids Tab",desc:"Finds schematic download links, YouTube repair videos, replacement part numbers, test points, and GSM forum threads."},
+              {step:"5. 💾 Firmware Tab",desc:"Searches for current firmware links, flash tool instructions, confirmed repair box/dongle support, FRP bypass steps, and special mode key combos."},
+              {step:"6. 🌐 vs 🧠",desc:"🌐 = Live Google Search results via Gemini grounding. 🧠 = Gemini AI knowledge fallback when search is temporarily unavailable. Both are clearly labelled."},
+            ].map(({step,desc})=>(
+              <div key={step} style={{marginBottom:16,paddingBottom:16,borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                <div style={{fontSize:9.5,fontWeight:800,letterSpacing:"0.15em",textTransform:"uppercase",marginBottom:5,color:"#e2e8f0"}}>{step}</div>
+                <p style={{fontSize:12.5,color:"rgba(255,255,255,0.5)",lineHeight:1.65,margin:0}}>{desc}</p>
+              </div>
+            ))}
+            <div style={{textAlign:"center",paddingTop:6}}>
+              <span style={{fontSize:8.5,fontFamily:"monospace",color:"rgba(255,255,255,0.18)",letterSpacing:"0.3em",textTransform:"uppercase"}}>ODOX FIND SOLUTION AI v2.0</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        *{margin:0;padding:0;box-sizing:border-box;}
+        @keyframes odoxSpin{to{transform:rotate(360deg)}}
+        @keyframes odoxPulse{0%,100%{opacity:1}50%{opacity:0.35}}
+        @keyframes odoxFadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+        @keyframes odoxPopIn{from{opacity:0;transform:scale(0.94)}to{opacity:1;transform:scale(1)}}
+        @keyframes odoxDot{0%,80%,100%{transform:scale(0.6);opacity:0.3}40%{transform:scale(1);opacity:1}}
+        ::placeholder{color:rgba(255,255,255,0.11)!important;}
+        ::-webkit-scrollbar{width:4px;}
+        ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:2px;}
+        select option{background:#111;}
+      `}</style>
+    </div>
+  );
+}
